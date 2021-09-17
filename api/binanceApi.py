@@ -2,11 +2,11 @@
 from utils.colors import negative, positive
 from pprint import pprint
 from binance.client import Client
-from googleApi import getHistoricalInterest
 import logging as log
 import numpy as np
 from datetime import datetime
 from matplotlib import pyplot as plt
+from api.googleApi import getHistoricalInterest
 
 log.basicConfig(filename="./logs/binance-api.log", level=log.DEBUG)
 client = Client(
