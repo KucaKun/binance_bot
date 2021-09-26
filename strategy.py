@@ -1,6 +1,7 @@
 import importlib, os
 from time import sleep, time
 from datetime import datetime
+from utils.enums import Decision
 import numpy as np
 from api.binanceApi import Client, client
 import matplotlib.dates as mdates
@@ -19,17 +20,21 @@ class StrategyBase:
         self.sells = []
         self.buys = []
 
-        self.after_sell_balances = [start_fiat]
+        self.after_sell_balances = [[start_fiat, start_crypto]]
+        self.indicator_values = []
 
     def load_data(self, x, y):
         self.klines = y
         self.times = x
 
-    def calculate_indicators(self):
-        """Fill indicator_decisions and buy/sell_amounts"""
+    def calculate_decision(self, data):
+        """Decide whether to buy or sell.
+        Returns decision and amount"""
         raise NotImplementedError
 
-    def _buy(self, buy_time, price, crypto_amount):
+    # region running the strategy
+    def _buy(self, buy_time, price, fiat_amount):
+        crypto_amount = fiat_amount / price
         cost = price * crypto_amount
         if self.balance_fiat > cost:
             self.buys.append([buy_time, price, crypto_amount, cost])
@@ -47,31 +52,42 @@ class StrategyBase:
     def _calculate_results(self):
         self.fiat_profit = self.balance_fiat - self.start_fiat
         self.crypto_profit = self.balance_crypto - self.start_crypto
+        self.overall_profit = self.fiat_profit + self.crypto_profit * self.klines[-1, 4]
 
-        self.fiat_profit_percentage = round(self.fiat_profit / self.start_fiat * 100, 2)
-        self.crypto_profit_percentage = round(
-            self.crypto_profit / self.start_crypto * 100, 2
-        )
+        if self.start_fiat > 0:
+            self.fiat_profit_percentage = round(
+                self.fiat_profit / self.start_fiat * 100, 2
+            )
+        else:
+            self.fiat_profit_percentage = self.fiat_profit
+
+        if self.start_crypto > 0:
+            self.crypto_profit_percentage = round(
+                self.crypto_profit / self.start_crypto * 100, 2
+            )
+        else:
+            self.crypto_profit_percentage = self.crypto_profit
 
     def run_strategy(self):
         """
         Iterates over whole dataset to fill buys and sells
         """
-        self.calculate_indicators()
-        for i in range(len(self.x)):
-            transaction_time = self.x[i]
-            transaction_price = self.y[i]
-            if self.indicator_decisions[i]:
-                amount = self.buy_amounts[i]
+        for i in range(len(self.times)):
+            decision, amount = self.calculate_decision(self.klines[0:i])
+            transaction_time = self.times[i]
+            transaction_price = self.klines[i, 4]
+            if decision == Decision.BUY:
                 self._buy(transaction_time, transaction_price, amount)
-            else:
-                amount = self.sell_amounts[i]
+            elif decision == Decision.SELL:
                 self._sell(transaction_time, transaction_price, amount)
+            elif decision == Decision.WAIT:
+                pass
         self.buys = np.array(self.buys)
         self.sells = np.array(self.sells)
 
-        self._calculate_results(self)
+        self._calculate_results()
 
+    # endregion
     # region plotting
     def _plot_price_over_time(self, ax):
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
@@ -84,73 +100,130 @@ class StrategyBase:
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
         ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=len(self.times) // 10))
 
+    def _plot_details(self, ax):
+        texts = []
+        coords = []
+        i = 0
+        for buy in self.buys:
+            if i < len(self.after_sell_balances):
+                date_time = mdates.date2num(buy[0])
+                fiat, crypto = self.after_sell_balances[i]
+                text = f"Buy: ${str(round(self.buys[i, 3], 2))} Balance: ${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
+                coord = (date_time, self.buys[i, 1])
+                texts.append({"buy": text})
+                coords.append({"buy": coord})
+            if i + 1 < len(self.after_sell_balances):
+                date_time = mdates.date2num(self.sells[i, 0])
+                fiat, crypto = self.after_sell_balances[i + 1]
+                text = f"Sell: ${str(round(self.sells[i, 3], 2))} Balance: ${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
+                coord = (date_time, self.sells[i, 1])
+                texts[-1]["sell"] = text
+                coords[-1]["sell"] = coord
+            i += 1
+
+        annotation = ax.annotate(
+            "",
+            (0, 0),
+            xytext=(0, -15),
+            textcoords="offset points",
+            color="black",
+            fontsize="medium",
+            backgroundcolor="#FFFFFF",
+        )
+
+        def update_annotation(scatter, index, name):
+            i = index["ind"][0]
+            x, y = scatter.get_offsets()[i]
+            annotation.xy = coords[i][name]
+            annotation.set_text(texts[i][name])
+
+        def hover(event):
+            vis = annotation.get_visible()
+            if event.inaxes == ax:
+                buy_contains, buy_index = self.scatter_buy.contains(event)
+                sell_contains, sell_index = self.scatter_sell.contains(event)
+                if buy_contains:
+                    update_annotation(self.scatter_buy, buy_index, "buy")
+                    annotation.set_visible(True)
+                    self.fig.canvas.draw_idle()
+                elif sell_contains:
+                    update_annotation(self.scatter_sell, sell_index, "sell")
+                    annotation.set_visible(True)
+                    self.fig.canvas.draw_idle()
+
+                else:
+                    if vis:
+                        annotation.set_visible(False)
+                        self.fig.canvas.draw_idle()
+
+        self.fig.canvas.mpl_connect("motion_notify_event", hover)
+
     def _plot_decision_markers(self, ax):
         buy_marker_style = matplotlib.markers.MarkerStyle(marker="^")
         sell_marker_style = matplotlib.markers.MarkerStyle(marker="v")
-        ax.scatter(
-            self.buys[:, 0], self.buys[:, 1], marker=buy_marker_style, color="green"
+        offset_buys = (
+            self.buys[:, 1] - (self.buys[:, 1].max() - self.buys[:, 1].min()) / 100
         )
-        ax.scatter(
-            self.sells[:, 0], self.sells[:, 1], marker=sell_marker_style, color="red"
+        offset_sells = (
+            self.sells[:, 1] + (self.sells[:, 1].max() - self.sells[:, 1].min()) / 100
         )
+        self.scatter_buy = ax.scatter(
+            self.buys[:, 0], offset_buys, marker=buy_marker_style, color="green"
+        )
+        self.scatter_sell = ax.scatter(
+            self.sells[:, 0], offset_sells, marker=sell_marker_style, color="red"
+        )
+        self._plot_details(ax)
 
-    def _plot_annotations(self, ax):
-        for buy in self.buys:
-            ax.annotate(
-                str(round(buy[3], 2)) + "$",
-                (buy[0], buy[3]),
-                color="black",
-                fontsize="medium",
-            )
-
-        for i, balances in enumerate(self.after_sell_balances):
-            fiat, crypto = balances
-            ax.annotate(
-                str(round(fiat, 2) + "$"),
-                (self.buys[i][0], 0),
-                xytext=(0, 8),
-                textcoords="offset points",
-                color="black",
-                fontsize="medium",
-            )
-            ax.annotate(
-                str(round(crypto, 2) + "$"),
-                (self.buys[i][0], 0),
-                xytext=(0, 2),
-                textcoords="offset points",
-                color="black",
-                fontsize="medium",
-            )
-
+    def _plot_profit_percentages(self, ax):
         for i, sell in enumerate(self.sells):
-            profit_percentage = sell[1] / self.after_sell_balances[i][0] * 100
+            date_time = mdates.date2num(sell[0])
+            previous_balance = (
+                self.after_sell_balances[i - 1][0]
+                + self.after_sell_balances[i - 1][1] * sell[1]
+            )
+            current_balance = (
+                self.after_sell_balances[i][0]
+                + self.after_sell_balances[i][1] * sell[1]
+            )
+            profit_percentage = (
+                (current_balance - previous_balance) / current_balance * 100
+            )
             if profit_percentage < 0:
                 color = "red"
             else:
                 color = "green"
-            coords = (sell[0], sell[1])
+            coords = (date_time, sell[1])
             ax.annotate(
                 str(round(profit_percentage, 2)) + "%",
                 coords,
                 xytext=(4, 4),
                 textcoords="offset points",
                 color=color,
-                fontsize="large",
+                fontsize="medium",
                 fontweight="bold",
                 backgroundcolor="#FFFFFF60",
             )
 
     def plot_strategy_run(self):
-        self.times = [mdates.date2num(date_time) for date_time in self.buys[:, 0]]
+        if len(self.buys) and len(self.sells):
+            self.times = [mdates.date2num(date_time) for date_time in self.times]
 
-        fig, (dax, iax) = plt.subplots(
-            2, 1, figsize=(20, 10), gridspec_kw={"height_ratios": [3, 1]}
-        )
-        dax.set_title(f"Overall strategy profit: ${self.strategy_profit}")
-        self._plot_price_over_time(dax)
-        self._plot_indicator_over_time(iax)
-        self._plot_annotations(dax)
-        plt.show()
+            self.fig, (dax, iax) = plt.subplots(
+                2,
+                1,
+                figsize=(20, 10),
+                gridspec_kw={"height_ratios": [3, 1]},
+                sharex=True,
+            )
+            dax.set_title(f"Overall strategy profit: ${round(self.overall_profit, 2)}")
+            self._plot_price_over_time(dax)
+            self._plot_decision_markers(dax)
+            self._plot_profit_percentages(dax)
+            self._plot_indicator_over_time(iax)
+            plt.show()
+        else:
+            print("Strategy was empty")
 
     # endregion
 
@@ -161,7 +234,7 @@ class StrategyTest:
 
     def _prepare_datasets(self):
         datasets = []
-        for i in range(5):
+        for i in range(1):
             # Prepare data y
             klines1m = client.get_klines(
                 symbol="ETHBUSD", interval=Client.KLINE_INTERVAL_3MINUTE
@@ -174,9 +247,11 @@ class StrategyTest:
 
     def _plot_iterations(self):
         for i, run in enumerate(self.runs):
-            print(i, "profits:")
-            print("\t Fiat average:", str(run.fiat_profit_percentage) + "%")
-            print("\t Crypto average profit:", str(run.crypto_profit_percentage) + "%")
+            print("\tRun", i, "profits:")
+            print("\t\t Fiat average profit:", str(run.fiat_profit_percentage) + "%")
+            print(
+                "\t\t Crypto average profit:", str(run.crypto_profit_percentage) + "%"
+            )
 
     def iterate_strategy(self, strategy_class):
         """
@@ -198,12 +273,19 @@ class StrategyTest:
         if not names:
             names = [file_name.rstrip(".py") for file_name in os.listdir("strategies")]
         else:
-            names.split(" ")
+            names = names.split(" ")
 
         for name in names:
-            strategy_module = importlib.import_module(name, "strategies")
+            strategy_module = importlib.import_module("strategies." + name)
             self.strategy_classes.append(strategy_module.Strategy)
 
     def test_strategies(self, names=""):
+        self._load_strategies(names)
         for strategy_class in self.strategy_classes:
+            print("Iterating", strategy_class.__name__)
             self.iterate_strategy(strategy_class)
+
+
+if __name__ == "__main__":
+    test = StrategyTest()
+    test.test_strategies("rsi_strategy")
