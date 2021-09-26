@@ -11,6 +11,14 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "preLaunchTask": ""
+        },
+        {
+            "name": "Python: poc",
+            "type": "python",
+            "request": "launch",
+            "program": "poc.py",
+            "console": "integratedTerminal",
+            "preLaunchTask": ""
         }
     ]
 }
