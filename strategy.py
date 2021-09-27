@@ -232,8 +232,8 @@ class StrategyBase:
         hodl_profit = round(
             self.sells[-1][1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
         )
-        ax.set_title(ax.get_title() + f"\nHODL profit would be: \${hodl_profit}")
-        self.legend.append("HODL")
+        ax.set_title(ax.get_title() + f"\nHold profit would be: \${hodl_profit}")
+        self.legend.append("Hold")
 
     def _plot_lucky_hodl(self, ax):
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
@@ -254,8 +254,8 @@ class StrategyBase:
         hodl_profit = round(
             lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
         )
-        ax.set_title(ax.get_title() + f"\nLucky HODL profit would be: \${hodl_profit}")
-        self.legend.append("Lucky HODL")
+        ax.set_title(ax.get_title() + f"\nLucky hold profit would be: \${hodl_profit}")
+        self.legend.append("Lucky hold")
 
     def plot_strategy_run(self):
         if len(self.buys) and len(self.sells):
