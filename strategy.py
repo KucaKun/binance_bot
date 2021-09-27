@@ -7,6 +7,7 @@ import matplotlib.dates as mdates
 import matplotlib
 import matplotlib.pyplot as plt
 from binance.client import Client
+import colorama
 
 
 class StrategyBase:
@@ -282,7 +283,7 @@ class StrategyTest:
 
     def _prepare_dataset(self, symbol, interval, i):
         raw_klines = client.get_historical_klines(
-            symbol, interval, f"{str(i+1)} day ago UTC"
+            symbol, interval, f"{str((i+1)*3*500)} minutes ago UTC"
         )
         klines = np.array(raw_klines).astype(float)
         times = [datetime.fromtimestamp(int(t) // 1000) for t in klines[:, 0]]
@@ -291,6 +292,7 @@ class StrategyTest:
     def _prepare_last_datasets(self, symbol, interval, num):
         datasets = []
         for i in range(num):
+            print(".")
             datasets.append(self._prepare_dataset(symbol, interval, i))
         return datasets
 
