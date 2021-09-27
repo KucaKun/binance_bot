@@ -19,8 +19,6 @@ class StrategyBase:
         self.balance_crypto = start_crypto
         self.sells = []
         self.buys = []
-
-        self.after_sell_balances = [[start_fiat, start_crypto]]
         self.indicator_values = []
 
     def load_data(self, x, y):
@@ -37,17 +35,34 @@ class StrategyBase:
         crypto_amount = fiat_amount / price
         cost = price * crypto_amount
         if self.balance_fiat > cost:
-            self.buys.append([buy_time, price, crypto_amount, cost])
             self.balance_crypto += crypto_amount
             self.balance_fiat -= cost
+            self.buys.append(
+                [
+                    buy_time,
+                    price,
+                    crypto_amount,
+                    cost,
+                    self.balance_fiat,
+                    self.balance_crypto,
+                ]
+            )
 
     def _sell(self, sell_time, price, crypto_amount):
         if self.balance_crypto > crypto_amount:
             profit = price * crypto_amount
-            self.sells.append([sell_time, price, crypto_amount, profit])
             self.balance_fiat += profit
             self.balance_crypto -= crypto_amount
-            self.after_sell_balances.append([self.balance_fiat, self.balance_crypto])
+            self.sells.append(
+                [
+                    sell_time,
+                    price,
+                    crypto_amount,
+                    profit,
+                    self.balance_fiat,
+                    self.balance_crypto,
+                ]
+            )
 
     def _calculate_results(self):
         self.fiat_profit = self.balance_fiat - self.start_fiat
@@ -103,32 +118,29 @@ class StrategyBase:
     def _plot_details(self, ax):
         texts = []
         coords = []
-        i = 0
-        for buy in self.buys:
-            if i < len(self.after_sell_balances):
-                date_time = mdates.date2num(buy[0])
-                fiat, crypto = self.after_sell_balances[i]
-                text = f"Buy: ${str(round(self.buys[i, 3], 2))} Balance: ${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
-                coord = (date_time, self.buys[i, 1])
-                texts.append({"buy": text})
-                coords.append({"buy": coord})
-            if i + 1 < len(self.after_sell_balances):
-                date_time = mdates.date2num(self.sells[i, 0])
-                fiat, crypto = self.after_sell_balances[i + 1]
-                text = f"Sell: ${str(round(self.sells[i, 3], 2))} Balance: ${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
-                coord = (date_time, self.sells[i, 1])
-                texts[-1]["sell"] = text
-                coords[-1]["sell"] = coord
-            i += 1
+        for buy, sell in zip(self.buys, self.sells):
+            date_time = mdates.date2num(buy[0])
+            fiat, crypto = buy[-2 : len(buy)]
+            text = f"Buy: \${str(round(buy[3], 2))} Balance: \${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
+            coord = (date_time, buy[1])
+            texts.append({"buy": text})
+            coords.append({"buy": coord})
+
+            date_time = mdates.date2num(sell[0])
+            fiat, crypto = sell[-2 : len(sell)]
+            text = f"Sell: \${str(round(sell[3], 2))} Balance: \${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
+            coord = (date_time, sell[1])
+            texts[-1]["sell"] = text
+            coords[-1]["sell"] = coord
 
         annotation = ax.annotate(
             "",
             (0, 0),
             xytext=(0, -15),
             textcoords="offset points",
-            color="black",
+            color="white",
             fontsize="medium",
-            backgroundcolor="#FFFFFF",
+            backgroundcolor="#000000AF",
         )
 
         def update_annotation(scatter, index, name):
@@ -179,13 +191,9 @@ class StrategyBase:
         for i, sell in enumerate(self.sells):
             date_time = mdates.date2num(sell[0])
             previous_balance = (
-                self.after_sell_balances[i - 1][0]
-                + self.after_sell_balances[i - 1][1] * sell[1]
+                self.sells[i - 1][-2] + self.sells[i - 1][-1] * self.sells[i - 1][1]
             )
-            current_balance = (
-                self.after_sell_balances[i][0]
-                + self.after_sell_balances[i][1] * sell[1]
-            )
+            current_balance = sell[-2] + sell[-1] * sell[1]
             profit_percentage = (
                 (current_balance - previous_balance) / current_balance * 100
             )
@@ -218,8 +226,8 @@ class StrategyBase:
             )
             dax.set_title(f"Overall strategy profit: ${round(self.overall_profit, 2)}")
             self._plot_price_over_time(dax)
-            self._plot_decision_markers(dax)
             self._plot_profit_percentages(dax)
+            self._plot_decision_markers(dax)
             self._plot_indicator_over_time(iax)
             plt.show()
         else:
