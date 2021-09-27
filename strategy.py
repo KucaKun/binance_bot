@@ -1,4 +1,4 @@
-import importlib, os
+import importlib, os, random
 from datetime import datetime
 from utils.enums import Decision
 import numpy as np
@@ -64,12 +64,11 @@ class StrategyBase:
             )
 
     def _calculate_results(self):
+        start_balance = self.start_fiat + self.start_crypto * self.klines[0, 4]
         self.fiat_profit = self.balance_fiat - self.start_fiat
         self.crypto_profit = self.balance_crypto - self.start_crypto
         self.overall_profit = self.fiat_profit + self.crypto_profit * self.klines[-1, 4]
-        self.profit_percentage = self.overall_profit - (
-            self.start_fiat + self.start_crypto * self.klines[0, 4]
-        )
+        self.profit_percentage = round(self.overall_profit / start_balance * 100, 2)
 
         self.hodl_profit = round(
             self.sells[-1][1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
@@ -78,6 +77,7 @@ class StrategyBase:
         self.lucky_hodl_profit = round(
             lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
         )
+        self.hodl_profit_percentage = round(self.hodl_profit / start_balance * 100, 2)
 
     def run_strategy(self):
         """
@@ -278,42 +278,70 @@ class StrategyBase:
 class StrategyTest:
     def __init__(self) -> None:
         self.runs = []
+        self.fresh = False
 
-    def _prepare_datasets(self):
+    def _prepare_dataset(self, symbol, interval, i):
+        raw_klines = client.get_historical_klines(
+            symbol, interval, f"{str(i+1)} day ago UTC"
+        )
+        klines = np.array(raw_klines).astype(float)
+        times = [datetime.fromtimestamp(int(t) // 1000) for t in klines[:, 0]]
+        return [times, klines]
+
+    def _prepare_last_datasets(self, symbol, interval, num):
         datasets = []
-        for i in range(1):
-            # Prepare data y
-            klines1m = client.get_klines(
-                symbol="ETHBUSD", interval=Client.KLINE_INTERVAL_3MINUTE
-            )
-            klines = np.array(klines1m).astype(float)
-            # X axis
-            times = [datetime.fromtimestamp(int(t) // 1000) for t in klines[:, 0]]
-            datasets.append([times, klines])
+        for i in range(num):
+            datasets.append(self._prepare_dataset(symbol, interval, i))
         return datasets
 
-    def _plot_iterations(self):
-        for i, run in enumerate(self.runs):
-            print("\tRun", i, "profits:")
-            print("\t\t Fiat average profit:", str(run.fiat_profit_percentage) + "%")
-            print(
-                "\t\t Crypto average profit:", str(run.crypto_profit_percentage) + "%"
+    def _prepare_random_datasets(self, symbol, interval, num, start, end):
+        datasets = []
+        days = random.sample(range(start, end), num)
+        for day in days:
+            datasets.append(self._prepare_dataset(symbol, interval, day))
+        return datasets
+
+    def _load_datasets(self):
+        file_name = "datasets/ETHBUSD-3m.np"
+        if not os.path.exists(file_name):
+            datasets = self._prepare_last_datasets(
+                "ETHBUSD", Client.KLINE_INTERVAL_3MINUTE, 50
             )
+        else:
+            datasets = np.load(file_name)
+        if not self.fresh:
+            np.save(file_name, datasets)
+        return datasets
+
+    def _plot_summary(self):
+        pass
+
+    def _test_summary(self):
+        average_profit = np.average([run.profit_percentage for run in self.runs])
+        print(
+            "Average strategy profit percentage:", str(round(average_profit, 2)) + "%"
+        )
+
+    def _run_summary(self, run, i):
+        print("Run #", i)
+        print("\tProfit:", str(run.profit_percentage) + "%")
+        print("\tHold profit:", str(run.hodl_profit_percentage) + "%")
 
     def iterate_strategy(self, strategy_class):
         """
         Runs the strategy using its variables on many different datasets
         """
-        datasets = self._prepare_datasets()
+        datasets = self._load_datasets()
         start_fiat = 100
         start_crypto = 0
-        for dataset in datasets:
+        for i, dataset in enumerate(datasets):
             strategy = strategy_class(start_fiat, start_crypto)
             strategy.load_data(*dataset)
             strategy.run_strategy()
-            strategy.plot_strategy_run()
+            self._run_summary(strategy, i)
             self.runs.append(strategy)
-        self._plot_iterations()
+        self._test_summary()
+        self._plot_summary()
 
     def _load_strategies(self, names=""):
         self.strategy_classes = []
