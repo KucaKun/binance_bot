@@ -8,6 +8,8 @@ class Strategy(StrategyBase):
         self.rsi_window_size = 7
         self.rsi_min = 30
         self.rsi_max = 80
+        self.min_factor = 0.4
+        self.min_transaction = 10
         super().__init__(start_fiat, start_crypto)
 
     def calculate_decision(self, data):
@@ -23,18 +25,18 @@ class Strategy(StrategyBase):
             if self.balance_crypto > 0:
                 decision = Decision.SELL
                 diff_percent = (rsi_value - self.rsi_max) / (100 - self.rsi_max)
-                factor = 0.6 + diff_percent * 0.4
+                factor = self.min_factor + diff_percent * (1 - self.min_factor)
                 amount = self.balance_crypto * factor
-                if amount < 10 / data[-1, 4]:
+                if amount < self.min_transaction / data[-1, 4]:
                     decision = Decision.WAIT
 
         elif rsi_value < self.rsi_min:
             if self.balance_fiat > 0:
                 decision = Decision.BUY
                 diff_percent = (self.rsi_min - rsi_value) / self.rsi_min
-                factor = 0.6 + diff_percent * 0.4
+                factor = self.min_factor + diff_percent * (1 - self.min_factor)
                 amount = self.balance_fiat * factor
-                if amount < 10:
+                if amount < self.min_transaction:
                     decision = Decision.WAIT
 
         return decision, amount
