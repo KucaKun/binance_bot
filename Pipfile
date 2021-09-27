@@ -11,6 +11,7 @@ praw = "*"
 pytrends = "*"
 matplotlib = "*"
 scipy = "*"
+progressbar2 = "*"
 
 [dev-packages]
 black = "*"
