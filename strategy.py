@@ -1,6 +1,4 @@
 import importlib, os
-import math
-from time import sleep, time
 from datetime import datetime
 from utils.enums import Decision
 import numpy as np
@@ -69,20 +67,17 @@ class StrategyBase:
         self.fiat_profit = self.balance_fiat - self.start_fiat
         self.crypto_profit = self.balance_crypto - self.start_crypto
         self.overall_profit = self.fiat_profit + self.crypto_profit * self.klines[-1, 4]
+        self.profit_percentage = self.overall_profit - (
+            self.start_fiat + self.start_crypto * self.klines[0, 4]
+        )
 
-        if self.start_fiat > 0:
-            self.fiat_profit_percentage = round(
-                self.fiat_profit / self.start_fiat * 100, 2
-            )
-        else:
-            self.fiat_profit_percentage = self.fiat_profit
-
-        if self.start_crypto > 0:
-            self.crypto_profit_percentage = round(
-                self.crypto_profit / self.start_crypto * 100, 2
-            )
-        else:
-            self.crypto_profit_percentage = self.crypto_profit
+        self.hodl_profit = round(
+            self.sells[-1][1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
+        )
+        lucky_sell = self.sells[np.argmax(self.sells[:, 1])]
+        self.lucky_hodl_profit = round(
+            lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
+        )
 
     def run_strategy(self):
         """
@@ -229,10 +224,7 @@ class StrategyBase:
             linewidth=1,
             linestyle="dashed",
         )
-        hodl_profit = round(
-            self.sells[-1][1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
-        )
-        ax.set_title(ax.get_title() + f"\nHold profit would be: \${hodl_profit}")
+        ax.set_title(ax.get_title() + f"\nHold profit would be: \${self.hodl_profit}")
         self.legend.append("Hold")
 
     def _plot_lucky_hodl(self, ax):
@@ -251,10 +243,9 @@ class StrategyBase:
             linewidth=1,
             linestyle="dashed",
         )
-        hodl_profit = round(
-            lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
+        ax.set_title(
+            ax.get_title() + f"\nLucky hold profit would be: \${self.lucky_hodl_profit}"
         )
-        ax.set_title(ax.get_title() + f"\nLucky hold profit would be: \${hodl_profit}")
         self.legend.append("Lucky hold")
 
     def plot_strategy_run(self):
