@@ -1,4 +1,5 @@
 import importlib, os
+import math
 from time import sleep, time
 from datetime import datetime
 from utils.enums import Decision
@@ -108,7 +109,7 @@ class StrategyBase:
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
         ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=len(self.times) // 10))
         ax.plot(self.times, self.klines[:, 4], color="blue")
-        ax.legend(["ETHBUSD"])
+        self.legend.append("ETHBUSD")
 
     def _plot_indicator_over_time(self, ax):
         # use super to call it and then plot
@@ -213,6 +214,49 @@ class StrategyBase:
                 backgroundcolor="#FFFFFF60",
             )
 
+    def _plot_hodl(self, ax):
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=len(self.times) // 10))
+        start = (
+            mdates.date2num(self.buys[0][0]),
+            mdates.date2num(self.sells[-1][0]),
+        )
+        end = (self.buys[0][1], self.sells[-1][1])
+        ax.plot(
+            start,
+            end,
+            color="#a0a0a0f0",
+            linewidth=1,
+            linestyle="dashed",
+        )
+        hodl_profit = round(
+            self.sells[-1][1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
+        )
+        ax.set_title(ax.get_title() + f"\nHODL profit would be: \${hodl_profit}")
+        self.legend.append("HODL")
+
+    def _plot_lucky_hodl(self, ax):
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=len(self.times) // 10))
+        lucky_sell = self.sells[np.argmax(self.sells[:, 1])]
+        start = (
+            mdates.date2num(self.buys[0][0]),
+            mdates.date2num(lucky_sell[0]),
+        )
+        end = (self.buys[0][1], lucky_sell[1])
+        ax.plot(
+            start,
+            end,
+            color="#f3e260f0",
+            linewidth=1,
+            linestyle="dashed",
+        )
+        hodl_profit = round(
+            lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
+        )
+        ax.set_title(ax.get_title() + f"\nLucky HODL profit would be: \${hodl_profit}")
+        self.legend.append("Lucky HODL")
+
     def plot_strategy_run(self):
         if len(self.buys) and len(self.sells):
             self.times = [mdates.date2num(date_time) for date_time in self.times]
@@ -224,11 +268,15 @@ class StrategyBase:
                 gridspec_kw={"height_ratios": [3, 1]},
                 sharex=True,
             )
-            dax.set_title(f"Overall strategy profit: ${round(self.overall_profit, 2)}")
+            dax.set_title(f"Overall strategy profit: \${round(self.overall_profit, 2)}")
+            self.legend = []
+            self._plot_hodl(dax)
+            self._plot_lucky_hodl(dax)
             self._plot_price_over_time(dax)
             self._plot_profit_percentages(dax)
             self._plot_decision_markers(dax)
             self._plot_indicator_over_time(iax)
+            dax.legend(self.legend)
             plt.show()
         else:
             print("Strategy was empty")
