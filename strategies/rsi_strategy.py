@@ -5,7 +5,7 @@ from utils.indicators import rsi
 
 class Strategy(StrategyBase):
     def __init__(self, start_fiat, start_crypto):
-        self.rsi_window_size = 5
+        self.rsi_window_size = 7
         self.rsi_min = 30
         self.rsi_max = 80
         super().__init__(start_fiat, start_crypto)
