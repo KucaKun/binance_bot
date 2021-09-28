@@ -1,4 +1,6 @@
 import importlib, os
+import re
+from colorama.ansi import Fore
 from colorama.initialise import colorama_text
 import numpy as np
 import argparse
@@ -12,7 +14,6 @@ from style import set_plot_style, DEFAULT_LINE_COLOR, BLUE, RED, GREEN, TICKS_CO
 class StrategyTest:
     def __init__(self) -> None:
         self.runs = []
-        self.joined_runs = []
 
     def _plot_avg_runs_profit(self, ax):
         average_profit = np.average([run.profit_percentage for run in self.runs])
@@ -52,15 +53,35 @@ class StrategyTest:
             "Average strategy profit percentage:", str(round(average_profit, 2)) + "%"
         )
         print(
-            f"After giving it {self.args.fiat}{self.to_ticker} every run, you'd now have {round(sum_profit,2)}{self.to_ticker} more!"
+            f"After giving it {self.args.fiat} {self.to_ticker} every run, you'd now have {round(sum_profit,2)} {self.to_ticker} more!"
         )
         print(
-            f"After giving it {self.args.fiat}{self.to_ticker} once at the start and running for the whole time, you'd now have {round(self.joined_runs.overall_profit,2)}{self.to_ticker} more!"
+            f"After giving it {self.args.fiat} {self.to_ticker} once at the start and running for the whole time, you'd now have {round(self.joined_runs.overall_profit,2)} {self.to_ticker} more!"
         )
-        self._plot_summary()
+        print(f"Hodl profit would be {self.joined_runs.hodl_profit} {self.to_ticker}!")
+        diff = round(self.joined_runs.overall_profit - self.joined_runs.hodl_profit, 2)
+        if diff > 0:
+            print(
+                Fore.GREEN
+                + f"Strategy is better than hodl by {abs(diff)} {self.to_ticker}!"
+                + Fore.RESET
+            )
+        else:
+            print(
+                Fore.RED
+                + f"Strategy is worse than hodl by {abs(diff)} {self.to_ticker}!"
+                + Fore.RESET
+            )
+
+        if not self.args.no_plot:
+            self._plot_summary()
 
     def _run_summary(self, run, i):
+
         print("Run #", i, end=" ")
+        if not run.did_anything:
+            print("Did nothing")
+            return
         if run.profit_percentage > 0:
             color = colorama.Fore.GREEN
         else:
@@ -112,7 +133,9 @@ class StrategyTest:
         )
         strategy.load_data(giga_times, giga_klines)
         strategy.run_strategy()
-        strategy.plot_strategy_run()
+        if not self.args.no_plot:
+            strategy.plot_strategy_run()
+        self.joined_runs = strategy
 
         self._test_summary()
 
@@ -150,6 +173,9 @@ class StrategyTest:
         )
         parser.add_argument(
             "--crypto", type=int, help="starting crypto balance", default=0
+        )
+        parser.add_argument(
+            "--no_plot", action="store_true", help="dont plot", default=False
         )
 
         self.args = parser.parse_args()

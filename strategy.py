@@ -15,10 +15,13 @@ class StrategyBase:
         self.balance_crypto = start_crypto
         self.sells = []
         self.buys = []
-        self.indicator_values = []
         self.from_ticker = from_ticker
         self.to_ticker = to_ticker
         self.ticker = from_ticker + to_ticker
+
+    @property
+    def did_anything(self):
+        return len(self.buys) and len(self.sells)
 
     def load_data(self, x, y):
         self.klines = y
@@ -71,14 +74,19 @@ class StrategyBase:
         self.profit_percentage = round(self.overall_profit / start_balance * 100, 2)
         self.end_balance = start_balance + self.overall_profit
 
-        self.hodl_profit = round(
-            self.sells[-1][1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
-        )
-        lucky_sell = self.sells[np.argmax(self.sells[:, 1])]
-        self.lucky_hodl_profit = round(
-            lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
-        )
-        self.hodl_profit_percentage = round(self.hodl_profit / start_balance * 100, 2)
+        if self.did_anything:
+            self.hodl_profit = round(
+                self.sells[-1][1] * (self.start_fiat / self.buys[0][1])
+                - self.start_fiat,
+                2,
+            )
+            lucky_sell = self.sells[np.argmax(self.sells[:, 1])]
+            self.lucky_hodl_profit = round(
+                lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
+            )
+            self.hodl_profit_percentage = round(
+                self.hodl_profit / start_balance * 100, 2
+            )
 
     def run_strategy(self):
         """
@@ -265,7 +273,8 @@ class StrategyBase:
             )
             set_plot_style(self.fig, (dax, iax))
             dax.set_title(
-                f"Overall strategy profit: {round(self.overall_profit, 2)}{self.to_ticker}", color=TICKS_COLOR
+                f"Overall strategy profit: {round(self.overall_profit, 2)}{self.to_ticker}",
+                color=TICKS_COLOR,
             )
             self.legend = []
             self._plot_hodl(dax)
