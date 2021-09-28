@@ -1,7 +1,9 @@
+from style import TICKS_COLOR, set_plot_style
 from utils.enums import Decision
 import matplotlib.dates as mdates
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class StrategyBase:
@@ -67,6 +69,7 @@ class StrategyBase:
         self.crypto_profit = self.balance_crypto - self.start_crypto
         self.overall_profit = self.fiat_profit + self.crypto_profit * self.klines[-1, 4]
         self.profit_percentage = round(self.overall_profit / start_balance * 100, 2)
+        self.end_balance = start_balance + self.overall_profit
 
         self.hodl_profit = round(
             self.sells[-1][1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
@@ -253,18 +256,16 @@ class StrategyBase:
     def plot_strategy_run(self):
         if len(self.buys) and len(self.sells):
             self.times = [mdates.date2num(date_time) for date_time in self.times]
-
             self.fig, (dax, iax) = plt.subplots(
                 2,
                 1,
                 figsize=(20, 10),
                 gridspec_kw={"height_ratios": [3, 1]},
-                axisb="#B7B7B7",
                 sharex=True,
             )
-            self.fig.patch.set_facecolor("#A7A7A7")
+            set_plot_style(self.fig, (dax, iax))
             dax.set_title(
-                f"Overall strategy profit: {round(self.overall_profit, 2)}{self.to_ticker}"
+                f"Overall strategy profit: {round(self.overall_profit, 2)}{self.to_ticker}", color=TICKS_COLOR
             )
             self.legend = []
             self._plot_hodl(dax)
