@@ -4,13 +4,13 @@ from utils.indicators import rsi
 
 
 class Strategy(StrategyBase):
-    def __init__(self, start_fiat, start_crypto):
+    def __init__(self, start_fiat, start_crypto, from_ticker, to_ticker):
         self.rsi_window_size = 7
         self.rsi_min = 30
         self.rsi_max = 80
         self.min_factor = 0.4
         self.min_transaction = 10
-        super().__init__(start_fiat, start_crypto)
+        super().__init__(start_fiat, start_crypto, from_ticker, to_ticker)
 
     def calculate_decision(self, data):
         decision = Decision.WAIT
