@@ -22,8 +22,8 @@ class Downloader:
         raw_klines = client.get_historical_klines(
             full_ticker,
             self.args.interval,
-            f"{str((i+1)*3*500)} minutes ago UTC",
-            end_str=f"{str((i)*3*500)} minutes ago UTC",
+            f"{str((i+1)*self.interval_size*500)} {self.interval_text} ago UTC",
+            end_str=f"{str((i)*self.interval_size*500)} {self.interval_text} ago UTC",
         )
         klines = np.array(raw_klines).astype(float)
         times = np.array([datetime.fromtimestamp(int(t) // 1000) for t in klines[:, 0]])
@@ -101,6 +101,10 @@ class Downloader:
         )
 
         self.args = parser.parse_args()
+        self.interval_size = int(
+            "".join([c for c in self.args.interval if c.isnumeric()])
+        )
+        self.interval_text = "".join([c for c in self.args.interval if c.isalpha()])
         self._run_downloader()
 
 
