@@ -35,36 +35,12 @@ class StrategyTest:
         )
         self.legend.append("Profit percentage")
 
-    def _plot_joined_runs_profits(self, ax):
-        x = range(len(self.runs))
-        y = [run.end_balance for run in self.joined_runs]
-        start_balance = [self.args.fiat for run in self.runs]
-        colors = [
-            GREEN if run.end_balance > self.args.fiat else RED
-            for run in self.joined_runs
-        ]
-        for x1, x2, y1, y2 in zip(x, x[1:], y, y[1:]):
-            if y1 > y2:
-                plt.plot([x1, x2], [y1, y2], RED)
-            elif y1 < y2:
-                plt.plot([x1, x2], [y1, y2], GREEN)
-
-        ax.plot(x, start_balance, linestyle="dashed", linewidth=1)
-        ax.set_ylabel(self.to_ticker)
-        ax.set_xlabel("Run #")
-        ax.set_title(
-            f"Joined runs wallet burnout chart",
-            color=TICKS_COLOR,
-        )
-        ax.legend(["Balance after run"])
-
     def _plot_summary(self):
-        self.fig, (rax, jax) = plt.subplots(2, 1, figsize=(20, 10), sharex=True)
+        self.fig, rax = plt.subplots(1, 1, figsize=(20, 10), sharex=True)
         self.legend = []
-        set_plot_style(self.fig, [rax, jax])
+        set_plot_style(self.fig, (rax,))
         self._plot_separate_runs_profits(rax)
         self._plot_avg_runs_profit(rax)
-        self._plot_joined_runs_profits(jax)
         self.legend.reverse()
         rax.legend(self.legend)
         plt.show()
@@ -76,7 +52,10 @@ class StrategyTest:
             "Average strategy profit percentage:", str(round(average_profit, 2)) + "%"
         )
         print(
-            f"After giving it {self.args.fiat}{self.to_ticker} every run, you'd now have {sum_profit}{self.to_ticker} more!"
+            f"After giving it {self.args.fiat}{self.to_ticker} every run, you'd now have {round(sum_profit,2)}{self.to_ticker} more!"
+        )
+        print(
+            f"After giving it {self.args.fiat}{self.to_ticker} once at the start and running for the whole time, you'd now have {round(self.joined_runs.overall_profit,2)}{self.to_ticker} more!"
         )
         self._plot_summary()
 
@@ -103,14 +82,15 @@ class StrategyTest:
         )
 
     def _load_datasets(self):
-        return np.load(self.args.dataset_path, allow_pickle=True)
+        return np.flipud(np.load(self.args.dataset_path, allow_pickle=True))
 
     def iterate_strategy(self, strategy_class):
         """
         Runs the strategy using its variables on many different datasets
         """
         datasets = self._load_datasets()
-
+        giga_times = []
+        giga_klines = []
         # Separate runs
         for i, dataset in progressbar(enumerate(datasets)):
             strategy = strategy_class(
@@ -119,21 +99,20 @@ class StrategyTest:
             strategy.load_data(*dataset)
             strategy.run_strategy()
             self.runs.append(strategy)
+            giga_times += list(dataset[0])
+            giga_klines += list(dataset[1])
         for i, run in enumerate(self.runs):
             self._run_summary(run, i)
 
         # Joined runs
-        last_fiat = self.args.fiat
-        last_crypto = self.args.crypto
-        for i, dataset in progressbar(enumerate(datasets)):
-            strategy = strategy_class(
-                last_fiat, last_crypto, self.from_ticker, self.to_ticker
-            )
-            strategy.load_data(*dataset)
-            strategy.run_strategy()
-            last_fiat = strategy.balance_fiat
-            last_crypto = strategy.balance_crypto
-            self.joined_runs.append(strategy)
+        giga_times = np.array(giga_times)
+        giga_klines = np.array(giga_klines)
+        strategy = strategy_class(
+            self.args.fiat, self.args.crypto, self.from_ticker, self.to_ticker
+        )
+        strategy.load_data(giga_times, giga_klines)
+        strategy.run_strategy()
+        strategy.plot_strategy_run()
 
         self._test_summary()
 
