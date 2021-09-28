@@ -1,17 +1,11 @@
-import importlib, os, random
-from datetime import datetime
 from utils.enums import Decision
-import numpy as np
-from api.binanceApi import Client, client
 import matplotlib.dates as mdates
 import matplotlib
 import matplotlib.pyplot as plt
-from binance.client import Client
-import colorama
 
 
 class StrategyBase:
-    def __init__(self, start_fiat, start_crypto):
+    def __init__(self, start_fiat, start_crypto, from_ticker, to_ticker):
         self.start_fiat = start_fiat
         self.start_crypto = start_crypto
 
@@ -20,6 +14,9 @@ class StrategyBase:
         self.sells = []
         self.buys = []
         self.indicator_values = []
+        self.from_ticker = from_ticker
+        self.to_ticker = to_ticker
+        self.ticker = from_ticker + to_ticker
 
     def load_data(self, x, y):
         self.klines = y
@@ -105,7 +102,7 @@ class StrategyBase:
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
         ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=len(self.times) // 10))
         ax.plot(self.times, self.klines[:, 4], color="blue")
-        self.legend.append("ETHBUSD")
+        self.legend.append(self.ticker)
 
     def _plot_indicator_over_time(self, ax):
         # use super to call it and then plot
@@ -118,14 +115,14 @@ class StrategyBase:
         for buy, sell in zip(self.buys, self.sells):
             date_time = mdates.date2num(buy[0])
             fiat, crypto = buy[-2 : len(buy)]
-            text = f"Buy: \${str(round(buy[3], 2))} Balance: \${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
+            text = f"Buy: {str(round(buy[3], 2))}{self.to_ticker} Balance: {str(round(fiat, 2))}{self.to_ticker} + {str(round(crypto, 5))}{self.from_ticker}"
             coord = (date_time, buy[1])
             texts.append({"buy": text})
             coords.append({"buy": coord})
 
             date_time = mdates.date2num(sell[0])
             fiat, crypto = sell[-2 : len(sell)]
-            text = f"Sell: \${str(round(sell[3], 2))} Balance: \${str(round(fiat, 2))} + {str(round(crypto, 5))}ETH"
+            text = f"Sell: {str(round(sell[3], 2))}{self.to_ticker} Balance: {str(round(fiat, 2))}{self.to_ticker} + {str(round(crypto, 5))}{self.from_ticker}"
             coord = (date_time, sell[1])
             texts[-1]["sell"] = text
             coords[-1]["sell"] = coord
@@ -225,7 +222,10 @@ class StrategyBase:
             linewidth=1,
             linestyle="dashed",
         )
-        ax.set_title(ax.get_title() + f"\nHold profit would be: \${self.hodl_profit}")
+        ax.set_title(
+            ax.get_title()
+            + f"\nHold profit would be: {self.hodl_profit}{self.to_ticker}"
+        )
         self.legend.append("Hold")
 
     def _plot_lucky_hodl(self, ax):
@@ -245,7 +245,8 @@ class StrategyBase:
             linestyle="dashed",
         )
         ax.set_title(
-            ax.get_title() + f"\nLucky hold profit would be: \${self.lucky_hodl_profit}"
+            ax.get_title()
+            + f"\nLucky hold profit would be: {self.lucky_hodl_profit}{self.to_ticker}"
         )
         self.legend.append("Lucky hold")
 
@@ -258,9 +259,13 @@ class StrategyBase:
                 1,
                 figsize=(20, 10),
                 gridspec_kw={"height_ratios": [3, 1]},
+                axisb="#B7B7B7",
                 sharex=True,
             )
-            dax.set_title(f"Overall strategy profit: \${round(self.overall_profit, 2)}")
+            self.fig.patch.set_facecolor("#A7A7A7")
+            dax.set_title(
+                f"Overall strategy profit: {round(self.overall_profit, 2)}{self.to_ticker}"
+            )
             self.legend = []
             self._plot_hodl(dax)
             self._plot_lucky_hodl(dax)
@@ -274,95 +279,3 @@ class StrategyBase:
             print("Strategy was empty")
 
     # endregion
-
-
-class StrategyTest:
-    def __init__(self) -> None:
-        self.runs = []
-        self.fresh = False
-
-    def _prepare_dataset(self, symbol, interval, i):
-        raw_klines = client.get_historical_klines(
-            symbol, interval, f"{str((i+1)*3*500)} minutes ago UTC"
-        )
-        klines = np.array(raw_klines).astype(float)
-        times = [datetime.fromtimestamp(int(t) // 1000) for t in klines[:, 0]]
-        return [times, klines]
-
-    def _prepare_last_datasets(self, symbol, interval, num):
-        datasets = []
-        for i in range(num):
-            print(".")
-            datasets.append(self._prepare_dataset(symbol, interval, i))
-        return datasets
-
-    def _prepare_random_datasets(self, symbol, interval, num, start, end):
-        datasets = []
-        days = random.sample(range(start, end), num)
-        for day in days:
-            datasets.append(self._prepare_dataset(symbol, interval, day))
-        return datasets
-
-    def _load_datasets(self):
-        file_name = "datasets/ETHBUSD-3m.np"
-        if not os.path.exists(file_name):
-            datasets = self._prepare_last_datasets(
-                "ETHBUSD", Client.KLINE_INTERVAL_3MINUTE, 50
-            )
-        else:
-            datasets = np.load(file_name)
-        if not self.fresh:
-            np.save(file_name, datasets)
-        return datasets
-
-    def _plot_summary(self):
-        pass
-
-    def _test_summary(self):
-        average_profit = np.average([run.profit_percentage for run in self.runs])
-        print(
-            "Average strategy profit percentage:", str(round(average_profit, 2)) + "%"
-        )
-
-    def _run_summary(self, run, i):
-        print("Run #", i)
-        print("\tProfit:", str(run.profit_percentage) + "%")
-        print("\tHold profit:", str(run.hodl_profit_percentage) + "%")
-
-    def iterate_strategy(self, strategy_class):
-        """
-        Runs the strategy using its variables on many different datasets
-        """
-        datasets = self._load_datasets()
-        start_fiat = 100
-        start_crypto = 0
-        for i, dataset in enumerate(datasets):
-            strategy = strategy_class(start_fiat, start_crypto)
-            strategy.load_data(*dataset)
-            strategy.run_strategy()
-            self._run_summary(strategy, i)
-            self.runs.append(strategy)
-        self._test_summary()
-        self._plot_summary()
-
-    def _load_strategies(self, names=""):
-        self.strategy_classes = []
-        if not names:
-            names = [file_name.rstrip(".py") for file_name in os.listdir("strategies")]
-        else:
-            names = names.split(" ")
-
-        for name in names:
-            strategy_module = importlib.import_module("strategies." + name)
-            self.strategy_classes.append(strategy_module.Strategy)
-
-    def test_strategies(self, names=""):
-        self._load_strategies(names)
-        for strategy_class in self.strategy_classes:
-            print("Iterating", strategy_class.__name__)
-            self.iterate_strategy(strategy_class)
-
-
-if __name__ == "__main__":
-    test = StrategyTest()
-    test.test_strategies("rsi_strategy")
