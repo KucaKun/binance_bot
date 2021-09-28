@@ -1,3 +1,4 @@
+from style import RED, TICKS_COLOR
 from strategy import StrategyBase
 from utils.enums import Decision
 from utils.indicators import rsi
@@ -43,7 +44,7 @@ class Strategy(StrategyBase):
 
     def _plot_indicator_over_time(self, ax):
         super()._plot_indicator_over_time(ax)
-        ax.plot(self.times, self.indicator_values, color="red")
-        ax.set_title(f"RSI with window size: {self.rsi_window_size}")
+        ax.plot(self.times, self.indicator_values, color=RED)
+        ax.set_title(f"RSI with window size: {self.rsi_window_size}", color=TICKS_COLOR)
         ax.fill_between(self.times, 0, self.rsi_min, color="C0", alpha=0.3)
         ax.fill_between(self.times, self.rsi_max, 100, color="C0", alpha=0.3)
