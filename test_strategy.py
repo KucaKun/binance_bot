@@ -182,12 +182,13 @@ class StrategyTest:
         self.args = parser.parse_args()
         self._read_dataset_name()
         self.test_strategies(self.args.strategy)
+        if not self.args.no_plot:
+            plt.draw()
+            plt.show()
+            input("PRESS ENTER")
 
 
 if __name__ == "__main__":
     colorama.init()
     test = StrategyTest()
     test.cli()
-    plt.draw()
-    plt.show()
-    input("PRESS ENTER")
