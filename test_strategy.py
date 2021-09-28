@@ -44,7 +44,8 @@ class StrategyTest:
         self._plot_avg_runs_profit(rax)
         self.legend.reverse()
         rax.legend(self.legend)
-        plt.show()
+        plt.ion()
+        plt.show(block=False)
 
     def _test_summary(self):
         average_profit = np.average([run.profit_percentage for run in self.runs])
@@ -187,3 +188,6 @@ if __name__ == "__main__":
     colorama.init()
     test = StrategyTest()
     test.cli()
+    plt.draw()
+    plt.show()
+    input("PRESS ENTER")

@@ -138,4 +138,5 @@ for annotation in profit_percentages:
         backgroundcolor="#FFFFFF60",
     )
 
-plt.show()
+plt.ion()
+plt.show(block=False)

@@ -284,7 +284,8 @@ class StrategyBase:
             self._plot_decision_markers(dax)
             self._plot_indicator_over_time(iax)
             dax.legend(self.legend)
-            plt.show()
+            plt.ion()
+            plt.show(block=False)
         else:
             print("Strategy was empty")
 
