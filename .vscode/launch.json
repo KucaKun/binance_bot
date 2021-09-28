@@ -20,14 +20,22 @@
             "program": "poc.py",
             "console": "integratedTerminal",
             "preLaunchTask": ""
-        }
+        },
         {
-            "name": "strategy test",
+            "name": "test strategy",
             "type": "python",
             "request": "launch",
             "program": "strategy.py",
             "console": "integratedTerminal",
-            "preLaunchTask": ""
+            "args": ["rsi_strategy","dataset/"]
+        },
+        {
+            "name": "downloader",
+            "type": "python",
+            "request": "launch",
+            "program": "download_data.py",
+            "console": "integratedTerminal",
+            "args": ["ETH","BUSD","3m","70","latest"]
         }
     ]
 }
