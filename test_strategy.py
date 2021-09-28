@@ -12,23 +12,71 @@ from style import set_plot_style, DEFAULT_LINE_COLOR, BLUE, RED, GREEN, TICKS_CO
 class StrategyTest:
     def __init__(self) -> None:
         self.runs = []
+        self.joined_runs = []
 
-    def _plot_runs_profits(self, ax):
+    def _plot_avg_runs_profit(self, ax):
+        average_profit = np.average([run.profit_percentage for run in self.runs])
+        x = range(len(self.runs))
+        y = [average_profit for run in self.runs]
+        ax.plot(x, y, linestyle="dashed", linewidth=1)
+        self.legend.append("Average")
+
+    def _plot_separate_runs_profits(self, ax):
+        average_profit = np.average([run.profit_percentage for run in self.runs])
         x = range(len(self.runs))
         y = [run.profit_percentage for run in self.runs]
-        ax.bar(x, y, edgecolor=TICKS_COLOR, color=BLUE)
-        ax.legend(["Every run profit percentage"])
+        colors = [RED if bar <= 0 else GREEN for bar in y]
+        ax.bar(x, y, edgecolor=TICKS_COLOR, color=colors)
+        ax.set_ylabel("%")
+        ax.set_xlabel("Run #")
+        ax.set_title(
+            f"Average run profit percentage is {round(average_profit,2)}%",
+            color=TICKS_COLOR,
+        )
+        self.legend.append("Profit percentage")
+
+    def _plot_joined_runs_profits(self, ax):
+        x = range(len(self.runs))
+        y = [run.end_balance for run in self.joined_runs]
+        start_balance = [self.args.fiat for run in self.runs]
+        colors = [
+            GREEN if run.end_balance > self.args.fiat else RED
+            for run in self.joined_runs
+        ]
+        for x1, x2, y1, y2 in zip(x, x[1:], y, y[1:]):
+            if y1 > y2:
+                plt.plot([x1, x2], [y1, y2], RED)
+            elif y1 < y2:
+                plt.plot([x1, x2], [y1, y2], GREEN)
+
+        ax.plot(x, start_balance, linestyle="dashed", linewidth=1)
+        ax.set_ylabel(self.to_ticker)
+        ax.set_xlabel("Run #")
+        ax.set_title(
+            f"Joined runs wallet burnout chart",
+            color=TICKS_COLOR,
+        )
+        ax.legend(["Balance after run"])
 
     def _plot_summary(self):
-        self.fig, dax = plt.subplots(1, 1, figsize=(20, 10), sharex=True)
-        set_plot_style(self.fig, [dax])
-        self._plot_runs_profits(dax)
+        self.fig, (rax, jax) = plt.subplots(2, 1, figsize=(20, 10), sharex=True)
+        self.legend = []
+        set_plot_style(self.fig, [rax, jax])
+        self._plot_separate_runs_profits(rax)
+        self._plot_avg_runs_profit(rax)
+        self._plot_joined_runs_profits(jax)
+        self.legend.reverse()
+        rax.legend(self.legend)
         plt.show()
 
     def _test_summary(self):
         average_profit = np.average([run.profit_percentage for run in self.runs])
+        sum_profit = np.average([run.overall_profit for run in self.runs])
         print(
             "Average strategy profit percentage:", str(round(average_profit, 2)) + "%"
+        )
+        print(
+            f"After giving it {self.args.fiat}{self.to_ticker} every run, you'd now have {sum_profit}{self.to_ticker} more!"
         )
         self._plot_summary()
 
@@ -62,6 +110,8 @@ class StrategyTest:
         Runs the strategy using its variables on many different datasets
         """
         datasets = self._load_datasets()
+
+        # Separate runs
         for i, dataset in progressbar(enumerate(datasets)):
             strategy = strategy_class(
                 self.args.fiat, self.args.crypto, self.from_ticker, self.to_ticker
@@ -71,6 +121,20 @@ class StrategyTest:
             self.runs.append(strategy)
         for i, run in enumerate(self.runs):
             self._run_summary(run, i)
+
+        # Joined runs
+        last_fiat = self.args.fiat
+        last_crypto = self.args.crypto
+        for i, dataset in progressbar(enumerate(datasets)):
+            strategy = strategy_class(
+                last_fiat, last_crypto, self.from_ticker, self.to_ticker
+            )
+            strategy.load_data(*dataset)
+            strategy.run_strategy()
+            last_fiat = strategy.balance_fiat
+            last_crypto = strategy.balance_crypto
+            self.joined_runs.append(strategy)
+
         self._test_summary()
 
     def _load_strategies(self, names=""):
