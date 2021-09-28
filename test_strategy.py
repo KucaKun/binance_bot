@@ -1,46 +1,77 @@
 import importlib, os
+from colorama.initialise import colorama_text
 import numpy as np
 import argparse
 from pathlib import Path
 from progressbar import progressbar
+import colorama
+from matplotlib import pyplot as plt
+from style import set_plot_style, DEFAULT_LINE_COLOR, BLUE, RED, GREEN, TICKS_COLOR
 
 
 class StrategyTest:
     def __init__(self) -> None:
         self.runs = []
 
+    def _plot_runs_profits(self, ax):
+        x = range(len(self.runs))
+        y = [run.profit_percentage for run in self.runs]
+        ax.bar(x, y, edgecolor=TICKS_COLOR, color=BLUE)
+        ax.legend(["Every run profit percentage"])
+
     def _plot_summary(self):
-        pass
+        self.fig, dax = plt.subplots(1, 1, figsize=(20, 10), sharex=True)
+        set_plot_style(self.fig, [dax])
+        self._plot_runs_profits(dax)
+        plt.show()
 
     def _test_summary(self):
         average_profit = np.average([run.profit_percentage for run in self.runs])
         print(
             "Average strategy profit percentage:", str(round(average_profit, 2)) + "%"
         )
+        self._plot_summary()
 
     def _run_summary(self, run, i):
-        print("Run #", i)
-        print("\tProfit:", str(run.profit_percentage) + "%")
-        print("\tHold profit:", str(run.hodl_profit_percentage) + "%")
+        print("Run #", i, end=" ")
+        if run.profit_percentage > 0:
+            color = colorama.Fore.GREEN
+        else:
+            color = colorama.Fore.RED
+
+        print(
+            color + "Profit:",
+            str(run.profit_percentage) + "%",
+            colorama.Fore.RESET,
+            end=" ",
+        )
+        if run.hodl_profit_percentage > 0:
+            color = colorama.Fore.GREEN
+        else:
+            color = colorama.Fore.RED
+        print(
+            "Hold profit:" + color,
+            str(run.hodl_profit_percentage) + "%" + colorama.Fore.RESET,
+        )
 
     def _load_datasets(self):
-        return np.load(self.args.dataset_path)
+        return np.load(self.args.dataset_path, allow_pickle=True)
 
-    def iterate_strategy(self, strategy_class, datasets):
+    def iterate_strategy(self, strategy_class):
         """
         Runs the strategy using its variables on many different datasets
         """
         datasets = self._load_datasets()
         for i, dataset in progressbar(enumerate(datasets)):
             strategy = strategy_class(
-                self.fiat, self.crypto, self.from_ticker, self.to_ticker
+                self.args.fiat, self.args.crypto, self.from_ticker, self.to_ticker
             )
             strategy.load_data(*dataset)
             strategy.run_strategy()
-            self._run_summary(strategy, i)
             self.runs.append(strategy)
+        for i, run in enumerate(self.runs):
+            self._run_summary(run, i)
         self._test_summary()
-        self._plot_summary()
 
     def _load_strategies(self, names=""):
         self.strategy_classes = []
@@ -61,8 +92,8 @@ class StrategyTest:
 
     def _read_dataset_name(self):
         # {self.args.from_ticker}-{self.args.to_ticker}-{self.args.interval}-{self.args.dataset_type}-{self.args.size}_{now}
-        file_name = Path(self.args.strategy).stem
-        dataset_data, date_time = file_name.split("_")
+        file_name = Path(self.args.dataset_path).stem
+        dataset_data, _, _ = file_name.split("_")
         self.from_ticker, self.to_ticker, self.interval, _, _ = dataset_data.split("-")
 
     def cli(self):
@@ -71,8 +102,12 @@ class StrategyTest:
         )
         parser.add_argument("strategy", type=str)
         parser.add_argument("dataset_path", type=str)
-        parser.add_argument("--fiat", type=int, help="starting fiat balance")
-        parser.add_argument("--crypto", type=int, help="starting crypto balance")
+        parser.add_argument(
+            "--fiat", type=int, help="starting fiat balance", default=100
+        )
+        parser.add_argument(
+            "--crypto", type=int, help="starting crypto balance", default=0
+        )
 
         self.args = parser.parse_args()
         self._read_dataset_name()
@@ -80,5 +115,6 @@ class StrategyTest:
 
 
 if __name__ == "__main__":
+    colorama.init()
     test = StrategyTest()
     test.cli()
