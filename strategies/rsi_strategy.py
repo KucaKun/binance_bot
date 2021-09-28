@@ -7,12 +7,17 @@ import numpy as np
 
 class Strategy(StrategyBase):
     def __init__(self, start_fiat, start_crypto, from_ticker, to_ticker):
+        self.min_transaction = 10
+
         self.rsi_window_size = 10
         self.rsi_low = 30
         self.rsi_high = 80
-        self.min_factor = 0.1
-        self.min_transaction = 10
-        self.max_vol_rsi = 50
+        self.min_factor = 0.3
+
+        # Restrainers
+        self.max_vol_rsi = 46
+        self.accepted_loss_percent = 2
+
         self.rsi_values = []
         self.vol_rsi_values = []
         super().__init__(start_fiat, start_crypto, from_ticker, to_ticker)
@@ -20,6 +25,7 @@ class Strategy(StrategyBase):
     def calculate_decision(self, data):
         decision = Decision.WAIT
         amount = 0
+
         if len(data) < self.rsi_window_size:
             rsi_value = 50
         else:
@@ -31,29 +37,41 @@ class Strategy(StrategyBase):
         else:
             volume_rsi_value = rsi(data[:, 5], self.rsi_window_size * 4)
         self.vol_rsi_values.append(volume_rsi_value)
-        if len(data):
-            volume = data[-1][5]
-            avg_volume = np.average(data[:, 5])
-            if volume_rsi_value < self.max_vol_rsi:
-                if rsi_value > self.rsi_high:
-                    if self.balance_crypto > 0:
-                        decision = Decision.SELL
-                        diff_percent = (rsi_value - self.rsi_high) / (
-                            100 - self.rsi_high
-                        )
-                        factor = self.min_factor + diff_percent * (1 - self.min_factor)
-                        amount = self.balance_crypto * factor
-                        if amount < self.min_transaction / data[-1, 4]:
-                            decision = Decision.WAIT
 
-                elif rsi_value < self.rsi_low:
-                    if self.balance_fiat > 0:
-                        decision = Decision.BUY
-                        diff_percent = (self.rsi_low - rsi_value) / self.rsi_low
-                        factor = self.min_factor + diff_percent * (1 - self.min_factor)
-                        amount = self.balance_fiat * factor
-                        if amount < self.min_transaction:
-                            decision = Decision.WAIT
+        if not len(data):
+            return decision, amount
+
+        volume = data[-1][5]
+        avg_volume = np.average(data[:, 5])
+        if volume_rsi_value < self.max_vol_rsi:
+            if rsi_value > self.rsi_high:
+                if self.balance_crypto > 0:
+                    decision = Decision.SELL
+                    diff_percent = (rsi_value - self.rsi_high) / (100 - self.rsi_high)
+                    factor = self.min_factor + diff_percent * (1 - self.min_factor)
+                    amount = self.balance_crypto * factor
+                    if amount < self.min_transaction / data[-1, 4]:
+                        decision = Decision.WAIT
+
+            elif rsi_value < self.rsi_low:
+                if self.balance_fiat > 0:
+                    decision = Decision.BUY
+                    diff_percent = (self.rsi_low - rsi_value) / self.rsi_low
+                    factor = self.min_factor + diff_percent * (1 - self.min_factor)
+                    amount = self.balance_fiat * factor
+                    if amount < self.min_transaction:
+                        decision = Decision.WAIT
+        # risk management
+        if self.avg_buy_price != 0:
+            current_price = data[-1][4]
+            buy_price = self.balance_crypto * self.avg_buy_price
+            sell_price = self.balance_crypto * current_price
+            current_loss_percentage = 100 - (
+                (sell_price - buy_price) / sell_price * 100
+            )
+            if current_loss_percentage > self.accepted_loss_percent:
+                decision = Decision.SELL
+                amount = self.balance_crypto
 
         return decision, amount
 

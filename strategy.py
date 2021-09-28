@@ -13,6 +13,7 @@ class StrategyBase:
 
         self.balance_fiat = start_fiat
         self.balance_crypto = start_crypto
+        self.avg_buy_price = 0
         self.sells = []
         self.buys = []
         self.from_ticker = from_ticker
@@ -49,6 +50,8 @@ class StrategyBase:
                     self.balance_crypto,
                 ]
             )
+            old_cost = self.balance_crypto * self.avg_buy_price
+            self.avg_buy_price = (old_cost + cost) / 2
 
     def _sell(self, sell_time, price, crypto_amount):
         if self.balance_crypto > crypto_amount:
