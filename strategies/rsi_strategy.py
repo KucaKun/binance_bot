@@ -1,16 +1,20 @@
-from style import RED, TICKS_COLOR
+from style import BLUE, RED, TICKS_COLOR
 from strategy import StrategyBase
 from utils.enums import Decision
 from utils.indicators import rsi
+import numpy as np
 
 
 class Strategy(StrategyBase):
     def __init__(self, start_fiat, start_crypto, from_ticker, to_ticker):
-        self.rsi_window_size = 7
-        self.rsi_min = 30
-        self.rsi_max = 80
-        self.min_factor = 0.4
+        self.rsi_window_size = 10
+        self.rsi_low = 30
+        self.rsi_high = 80
+        self.min_factor = 0.1
         self.min_transaction = 10
+        self.max_vol_rsi = 50
+        self.rsi_values = []
+        self.vol_rsi_values = []
         super().__init__(start_fiat, start_crypto, from_ticker, to_ticker)
 
     def calculate_decision(self, data):
@@ -20,31 +24,43 @@ class Strategy(StrategyBase):
             rsi_value = 50
         else:
             rsi_value = rsi(data[:, 4], self.rsi_window_size)
-        self.indicator_values.append(rsi_value)
+        self.rsi_values.append(rsi_value)
 
-        if rsi_value > self.rsi_max:
-            if self.balance_crypto > 0:
-                decision = Decision.SELL
-                diff_percent = (rsi_value - self.rsi_max) / (100 - self.rsi_max)
-                factor = self.min_factor + diff_percent * (1 - self.min_factor)
-                amount = self.balance_crypto * factor
-                if amount < self.min_transaction / data[-1, 4]:
-                    decision = Decision.WAIT
+        if len(data) < self.rsi_window_size:
+            volume_rsi_value = 50
+        else:
+            volume_rsi_value = rsi(data[:, 5], self.rsi_window_size * 4)
+        self.vol_rsi_values.append(volume_rsi_value)
+        if len(data):
+            volume = data[-1][5]
+            avg_volume = np.average(data[:, 5])
+            if volume_rsi_value < self.max_vol_rsi:
+                if rsi_value > self.rsi_high:
+                    if self.balance_crypto > 0:
+                        decision = Decision.SELL
+                        diff_percent = (rsi_value - self.rsi_high) / (
+                            100 - self.rsi_high
+                        )
+                        factor = self.min_factor + diff_percent * (1 - self.min_factor)
+                        amount = self.balance_crypto * factor
+                        if amount < self.min_transaction / data[-1, 4]:
+                            decision = Decision.WAIT
 
-        elif rsi_value < self.rsi_min:
-            if self.balance_fiat > 0:
-                decision = Decision.BUY
-                diff_percent = (self.rsi_min - rsi_value) / self.rsi_min
-                factor = self.min_factor + diff_percent * (1 - self.min_factor)
-                amount = self.balance_fiat * factor
-                if amount < self.min_transaction:
-                    decision = Decision.WAIT
+                elif rsi_value < self.rsi_low:
+                    if self.balance_fiat > 0:
+                        decision = Decision.BUY
+                        diff_percent = (self.rsi_low - rsi_value) / self.rsi_low
+                        factor = self.min_factor + diff_percent * (1 - self.min_factor)
+                        amount = self.balance_fiat * factor
+                        if amount < self.min_transaction:
+                            decision = Decision.WAIT
 
         return decision, amount
 
     def _plot_indicator_over_time(self, ax):
         super()._plot_indicator_over_time(ax)
-        ax.plot(self.times, self.indicator_values, color=RED)
+        ax.plot(self.times, self.rsi_values, color=RED, linewidth=1)
+        ax.plot(self.times, self.vol_rsi_values, color=BLUE, linewidth=1)
         ax.set_title(f"RSI with window size: {self.rsi_window_size}", color=TICKS_COLOR)
-        ax.fill_between(self.times, 0, self.rsi_min, color="C0", alpha=0.3)
-        ax.fill_between(self.times, self.rsi_max, 100, color="C0", alpha=0.3)
+        ax.fill_between(self.times, 0, self.rsi_low, color="C0", alpha=0.3)
+        ax.fill_between(self.times, self.rsi_high, 100, color="C0", alpha=0.3)
