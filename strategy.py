@@ -1,4 +1,4 @@
-from style import TICKS_COLOR, set_plot_style
+from style import GREEN, TICKS_COLOR, set_axes_style, set_plot_style
 from utils.enums import Decision
 import matplotlib.dates as mdates
 import matplotlib
@@ -200,9 +200,11 @@ class StrategyBase:
         self.scatter_buy = ax.scatter(
             self.buys[:, 0], offset_buys, marker=buy_marker_style, color="green"
         )
+        self.legend.append(f"BUY")
         self.scatter_sell = ax.scatter(
             self.sells[:, 0], offset_sells, marker=sell_marker_style, color="red"
         )
+        self.legend.append(f"SELL")
         self._plot_details(ax)
 
     def _plot_profits(self, ax):
@@ -267,6 +269,21 @@ class StrategyBase:
         )
         self.legend.append("Lucky hold")
 
+    def _plot_wallet_balance(self, ax):
+        ax = ax.twinx()
+        set_axes_style([ax])
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=len(self.times) // 10))
+        balances = self.sells[:, 4] + self.sells[:, 5] * self.sells[:, 1]
+        ax.plot(
+            self.sells[:, 0],
+            balances,
+            color=GREEN,
+            linewidth=1,
+            linestyle="dotted",
+        )
+        ax.legend([f"{self.to_ticker} Balance"], loc="lower right")
+
     def plot_strategy_run(self):
         if len(self.buys) and len(self.sells):
             self.times = [mdates.date2num(date_time) for date_time in self.times]
@@ -283,6 +300,7 @@ class StrategyBase:
                 color=TICKS_COLOR,
             )
             self.legend = []
+            self._plot_wallet_balance(dax)
             self._plot_hodl(dax)
             self._plot_lucky_hodl(dax)
             self._plot_price_over_time(dax)
