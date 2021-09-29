@@ -11,8 +11,7 @@ GREEN = "#035C0C"
 BLUE = "#164ACD"
 
 
-def set_plot_style(fig, axes):
-    fig.patch.set_facecolor(FIG_BG_COLOR)
+def set_axes_style(axes):
     for ax in axes:
         ax.patch.set_facecolor(AX_BG_COLOR)
         ax.spines["top"].set_color(TICKS_COLOR)
@@ -22,3 +21,8 @@ def set_plot_style(fig, axes):
         ax.tick_params(colors=TICKS_COLOR)
         ax.xaxis.label.set_color(AX_LABEL_COLOR)
         ax.yaxis.label.set_color(AX_LABEL_COLOR)
+
+
+def set_plot_style(fig, axes):
+    fig.patch.set_facecolor(FIG_BG_COLOR)
+    set_axes_style(axes)
