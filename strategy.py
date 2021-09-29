@@ -36,46 +36,56 @@ class StrategyBase:
     # region running the strategy
     def _buy(self, buy_time, price, fiat_amount):
         crypto_amount = fiat_amount / price
-        cost = price * crypto_amount
-        if self.balance_fiat > cost:
+        fiat_cost = price * crypto_amount
+        if self.balance_fiat > fiat_cost:
+            old_price = self.balance_crypto * self.avg_buy_price
+            new_price = crypto_amount * price
+            self.avg_buy_price = (
+                (old_price + new_price) / (self.balance_crypto + crypto_amount)
+                if old_price != 0
+                else price
+            )
             self.balance_crypto += crypto_amount
-            self.balance_fiat -= cost
+            self.balance_fiat -= fiat_cost
             self.buys.append(
                 [
                     buy_time,
                     price,
                     crypto_amount,
-                    cost,
+                    fiat_cost,
                     self.balance_fiat,
                     self.balance_crypto,
+                    self.avg_buy_price,
                 ]
             )
-            old_cost = self.balance_crypto * self.avg_buy_price
-            self.avg_buy_price = (old_cost + cost) / 2
 
     def _sell(self, sell_time, price, crypto_amount):
         if self.balance_crypto > crypto_amount:
-            profit = price * crypto_amount
-            self.balance_fiat += profit
+            fiat_cost = price * crypto_amount
+            self.balance_fiat += fiat_cost
             self.balance_crypto -= crypto_amount
+
+            profit = fiat_cost - self.avg_buy_price * crypto_amount
             self.sells.append(
                 [
                     sell_time,
                     price,
                     crypto_amount,
-                    profit,
+                    fiat_cost,
                     self.balance_fiat,
                     self.balance_crypto,
+                    profit,
                 ]
             )
 
     def _calculate_results(self):
-        start_balance = self.start_fiat + self.start_crypto * self.klines[0, 4]
-        self.fiat_profit = self.balance_fiat - self.start_fiat
-        self.crypto_profit = self.balance_crypto - self.start_crypto
-        self.overall_profit = self.fiat_profit + self.crypto_profit * self.klines[-1, 4]
-        self.profit_percentage = round(self.overall_profit / start_balance * 100, 2)
-        self.end_balance = start_balance + self.overall_profit
+        self.start_balance = self.start_fiat + self.start_crypto * self.klines[0, 4]
+        self.end_balance = self.balance_fiat + self.balance_crypto * self.klines[-1, 4]
+
+        self.overall_profit = self.end_balance - self.start_balance
+        self.profit_percentage = round(
+            self.overall_profit / self.start_balance * 100, 2
+        )
 
         if self.did_anything:
             self.hodl_profit = round(
@@ -88,7 +98,7 @@ class StrategyBase:
                 lucky_sell[1] * (self.start_fiat / self.buys[0][1]) - self.start_fiat, 2
             )
             self.hodl_profit_percentage = round(
-                self.hodl_profit / start_balance * 100, 2
+                self.hodl_profit / self.start_balance * 100, 2
             )
 
     def run_strategy(self):
@@ -128,15 +138,15 @@ class StrategyBase:
         coords = []
         for buy, sell in zip(self.buys, self.sells):
             date_time = mdates.date2num(buy[0])
-            fiat, crypto = buy[-2 : len(buy)]
-            text = f"Buy: {str(round(buy[3], 2))}{self.to_ticker} Balance: {str(round(fiat, 2))}{self.to_ticker} + {str(round(crypto, 5))}{self.from_ticker}"
+            balance = buy[4] + buy[5] * buy[1]
+            text = f"Buy: {str(round(buy[3], 2))}{self.to_ticker} Balance: {str(round(balance, 2))}{self.to_ticker}"
             coord = (date_time, buy[1])
             texts.append({"buy": text})
             coords.append({"buy": coord})
 
             date_time = mdates.date2num(sell[0])
-            fiat, crypto = sell[-2 : len(sell)]
-            text = f"Sell: {str(round(sell[3], 2))}{self.to_ticker} Balance: {str(round(fiat, 2))}{self.to_ticker} + {str(round(crypto, 5))}{self.from_ticker}"
+            balance = sell[4] + sell[5] * sell[1]
+            text = f"Sell: {str(round(sell[3], 2))}{self.to_ticker} Balance: {str(round(balance, 2))}{self.to_ticker}"
             coord = (date_time, sell[1])
             texts[-1]["sell"] = text
             coords[-1]["sell"] = coord
@@ -195,23 +205,16 @@ class StrategyBase:
         )
         self._plot_details(ax)
 
-    def _plot_profit_percentages(self, ax):
+    def _plot_profits(self, ax):
         for i, sell in enumerate(self.sells):
             date_time = mdates.date2num(sell[0])
-            previous_balance = (
-                self.sells[i - 1][-2] + self.sells[i - 1][-1] * self.sells[i - 1][1]
-            )
-            current_balance = sell[-2] + sell[-1] * sell[1]
-            profit_percentage = (
-                (current_balance - previous_balance) / current_balance * 100
-            )
-            if profit_percentage < 0:
+            if sell[-1] < 0:
                 color = "red"
             else:
                 color = "green"
             coords = (date_time, sell[1])
             ax.annotate(
-                str(round(profit_percentage, 2)) + "%",
+                "\$" + str(round(sell[-1], 2)),
                 coords,
                 xytext=(4, 4),
                 textcoords="offset points",
@@ -283,7 +286,7 @@ class StrategyBase:
             self._plot_hodl(dax)
             self._plot_lucky_hodl(dax)
             self._plot_price_over_time(dax)
-            self._plot_profit_percentages(dax)
+            self._plot_profits(dax)
             self._plot_decision_markers(dax)
             self._plot_indicator_over_time(iax)
             dax.legend(self.legend)
