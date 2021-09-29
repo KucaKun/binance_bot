@@ -1,4 +1,4 @@
-import importlib, os
+import importlib, os, sys
 import re
 from colorama.ansi import Fore
 from colorama.initialise import colorama_text
@@ -163,7 +163,7 @@ class StrategyTest:
         dataset_data, _, _ = file_name.split("_")
         self.from_ticker, self.to_ticker, self.interval, _, _ = dataset_data.split("-")
 
-    def cli(self):
+    def _parse_args(self, args):
         parser = argparse.ArgumentParser(
             description="Test your chosen strategy on a dataset."
         )
@@ -179,7 +179,10 @@ class StrategyTest:
             "--no_plot", action="store_true", help="dont plot", default=False
         )
 
-        self.args = parser.parse_args()
+        self.args = parser.parse_args(args)
+
+    def cli(self):
+        self._parse_args(sys.argv[1:])
         self._read_dataset_name()
         self.test_strategies(self.args.strategy)
         if not self.args.no_plot:
