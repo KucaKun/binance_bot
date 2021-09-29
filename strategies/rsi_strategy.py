@@ -61,13 +61,12 @@ class Strategy(StrategyBase):
                     amount = self.balance_fiat * factor
                     if amount < self.min_transaction:
                         decision = Decision.WAIT
+
         # risk management
-        if self.avg_buy_price != 0:
+        if self.avg_buy_price != 0 and decision == Decision.WAIT:
             current_price = data[-1][4]
-            buy_price = self.balance_crypto * self.avg_buy_price
-            sell_price = self.balance_crypto * current_price
             current_loss_percentage = 100 - (
-                (sell_price - buy_price) / sell_price * 100
+                (current_price - self.avg_buy_price) / current_price * 100
             )
             if current_loss_percentage > self.accepted_loss_percent:
                 decision = Decision.SELL
